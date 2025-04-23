@@ -1,0 +1,15 @@
+import pytest
+
+from fastq_compress.compressor import compress_chunk, Compression
+
+
+def test_compressor():
+    chunk = [b"1\n1"]
+    with pytest.raises(ValueError):
+        compress_chunk([chunk], [Compression.GZIP])
+
+    col1 = [b"1", b"2", b"3", b"4"]
+    col2 = [b"a", b"b", b"c", b"d"]
+    chunk = [col1, col2]
+    compressed = compress_chunk(chunk, [Compression.ZSTD, Compression.GZIP])
+    assert len(compressed) == 2
