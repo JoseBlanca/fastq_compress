@@ -1,0 +1,17 @@
+[project]
+name = "fastq-compress"
+version = "0.1.0"
+description = "FASTQ file compressor"
+readme = "README.md"
+authors = [
+    { name = "Jose Blanca", email = "jblanca@upv.es" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+fastq-compress = "fastq_compress:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
