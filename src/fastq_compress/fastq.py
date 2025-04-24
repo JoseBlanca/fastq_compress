@@ -4,6 +4,7 @@ from collections import namedtuple
 from more_itertools import chunked
 
 from fastq_compress.compressor import write_compressed_file, read_compressed_file
+from fastq_compress.coding import encode_dna, decode_dna
 
 Seq = namedtuple("Seq", ["name_line", "seq", "qual"])
 
@@ -24,6 +25,10 @@ def _columnize_fastq_chunk(chunk):
     name_lines, seqs, quals = [], [], []
     for seq in chunk:
         name_lines.append(seq.name_line.rstrip(b"\n"))
+        # We have tried to encoded the DNA sequence using the fact that you can put several
+        # nucleotides into one byte, but it has not improved the compression, and it is
+        # slower, and much more complex, so don't try to do it
+        # encode_dna(seq.seq.rstrip(b"\n"))
         seqs.append(seq.seq.rstrip(b"\n"))
         quals.append(seq.qual.rstrip(b"\n"))
     return name_lines, seqs, quals
