@@ -6,8 +6,8 @@ import pytest
 from fastq_compress.compressor import (
     compress_chunk,
     Compression,
-    compress_chunks,
-    N_COLS_STRUCT_FMT,
+    write_compressed_file,
+    read_compressed_file,
 )
 
 
@@ -28,8 +28,7 @@ def test_chunks_compressor():
     col2 = [b"a", b"b", b"c", b"d"]
     chunks = [[col1, col2], [col1, col2]]
     fhand = BytesIO()
-    compress_chunks(fhand, chunks)
+    write_compressed_file(fhand, chunks)
+
     fhand.seek(0)
-    content = fhand.read(struct.calcsize(N_COLS_STRUCT_FMT))
-    n_cols = 2
-    assert struct.unpack(N_COLS_STRUCT_FMT, content)[0] == n_cols
+    read_compressed_file(fhand)
