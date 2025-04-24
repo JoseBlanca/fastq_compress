@@ -1,7 +1,7 @@
 import lzma
 import gzip
 from enum import IntEnum
-from typing import BinaryIO
+from typing import BinaryIO, Iterator
 import struct
 
 import zstandard
@@ -16,9 +16,18 @@ class CompressionAlgorithm(IntEnum):
 DEFAULT_ALGORITHM = CompressionAlgorithm.LZMA
 
 COMPRESSION_ALGORITHMS = {
-    CompressionAlgorithm.GZIP: {"compressor": gzip.compress},
-    CompressionAlgorithm.LZMA: {"compressor": lzma.compress},
-    CompressionAlgorithm.ZSTD: {"compressor": zstandard.compress},
+    CompressionAlgorithm.GZIP: {
+        "compressor": gzip.compress,
+        "decompressor": gzip.decompress,
+    },
+    CompressionAlgorithm.LZMA: {
+        "compressor": lzma.compress,
+        "decompressor": lzma.decompress,
+    },
+    CompressionAlgorithm.ZSTD: {
+        "compressor": zstandard.compress,
+        "decompressor": zstandard.decompress,
+    },
 }
 
 MAGIC = b"FQC"  # "FASTQ Compressed"
@@ -42,6 +51,23 @@ def compress_chunk(
     return compressed
 
 
+def _create_fmt_for_algoritms(n_cols):
+    return f"{n_cols}B"
+
+
+def _write_blob(fhand, data: bytes):
+    fhand.write(struct.pack("I", len(data)))
+    fhand.write(data)
+
+
+def _read_blob(fhand):
+    blob_size = _read_binary_struct(fhand, "I", 4)[0]
+    data = fhand.read(blob_size)
+    if len(data) < blob_size:
+        raise EOFError("Unexpected EOF when reading blob data")
+    return data
+
+
 def write_compressed_file(
     fhand: BinaryIO, chunks, algorithms: list[CompressionAlgorithm] | None = None
 ):
@@ -49,32 +75,54 @@ def write_compressed_file(
     fhand.write(header)
 
     for chunk in chunks:
+        # chunk struct
+        # I n_cols
+        # {n_cols}B list of algorithms
         n_cols = len(chunk)
         if algorithms is None:
             algorithms = [DEFAULT_ALGORITHM] * n_cols
+            int_algorithms = [algorithm.value for algorithm in algorithms]
+            algorithms_fmt = _create_fmt_for_algoritms(n_cols)
 
         fhand.write(struct.pack(N_COLS_STRUCT_FMT, n_cols))
 
         if n_cols != len(algorithms):
             raise RuntimeError("Different chunks have a different number of columns")
 
-        compressed_chunk = compress_chunk(chunk, algorithms)
-        to_write = {"algorithms": algorithms, "chunks": compressed_chunk}
+        fhand.write(struct.pack(algorithms_fmt, *int_algorithms))
+
+        compressed_cols = compress_chunk(chunk, algorithms)
+        for col in compressed_cols:
+            _write_blob(fhand, col)
 
 
 def _read_binary_struct(fhand, struct_fmt, bytes_size):
     content = fhand.read(bytes_size)
     if content == b"":
         raise EOFError()
-    return struct.unpack(struct_fmt, content)
+    unpacked = struct.unpack(struct_fmt, content)
+    return unpacked
 
 
 def _read_chunk(fhand):
     n_cols = _read_binary_struct(fhand, N_COLS_STRUCT_FMT, N_COLS_SIZE)[0]
-    print(n_cols)
+
+    algorithms_fmt = _create_fmt_for_algoritms(n_cols)
+    algorithms_size = struct.calcsize(algorithms_fmt)
+    algorithms_ints = _read_binary_struct(fhand, algorithms_fmt, algorithms_size)
+    algorithms = [CompressionAlgorithm(algorithm) for algorithm in algorithms_ints]
+
+    cols = []
+    for col_idx in range(n_cols):
+        compressed_col = _read_blob(fhand)
+        decompressor_funct = COMPRESSION_ALGORITHMS[algorithms[col_idx]]["decompressor"]
+        col = decompressor_funct(compressed_col).split(b"\n")
+        cols.append(col)
+
+    return {"n_cols": n_cols, "algorithms": algorithms, "columns": cols}
 
 
-def read_compressed_file(fhand: BinaryIO):
+def read_compressed_file(fhand: BinaryIO) -> Iterator:
     magic = fhand.read(3)
     if magic == b"":
         raise RuntimeError("The file is empty")
@@ -89,6 +137,7 @@ def read_compressed_file(fhand: BinaryIO):
 
     while True:
         try:
-            _read_chunk(fhand)
+            chunk = _read_chunk(fhand)
         except EOFError:
             break
+        yield chunk["columns"]

@@ -33,4 +33,6 @@ def test_chunks_compressor():
     write_compressed_file(fhand, chunks)
 
     fhand.seek(0)
-    read_compressed_file(fhand)
+    read_chunks = read_compressed_file(fhand)
+    read_chunks = list(read_chunks)
+    assert read_chunks == chunks
