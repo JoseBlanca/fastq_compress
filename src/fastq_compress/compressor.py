@@ -3,6 +3,7 @@ import gzip
 from enum import IntEnum
 from typing import BinaryIO, Iterator
 import struct
+from collections import defaultdict
 
 import zstandard
 
@@ -68,6 +69,30 @@ def _read_blob(fhand):
     return data
 
 
+def _get_best_compression_algorithm(chunk):
+    compression_sizes = defaultdict(dict)
+    for algorithm in COMPRESSION_ALGORITHMS:
+        compression_funct = COMPRESSION_ALGORITHMS[algorithm]["compressor"]
+        for idx, col in enumerate(chunk):
+            compression_sizes[idx][algorithm] = len(compression_funct(b"\n".join(col)))
+
+    best_algorithms = []
+    for col_idx in range(len(compression_sizes)):
+        sizes = compression_sizes[col_idx]
+        best_algorithm = None
+        smallest_size = None
+        for algorithm, size in sizes.items():
+            if best_algorithm is None:
+                best_algorithm = algorithm
+                smallest_size = size
+            else:
+                if smallest_size > size:
+                    best_algorithm = algorithm
+                    smallest_size = size
+        best_algorithms.append(CompressionAlgorithm(algorithm))
+    return best_algorithms
+
+
 def write_compressed_file(
     fhand: BinaryIO, chunks, algorithms: list[CompressionAlgorithm] | None = None
 ):
@@ -80,7 +105,7 @@ def write_compressed_file(
         # {n_cols}B list of algorithms
         n_cols = len(chunk)
         if algorithms is None:
-            algorithms = [DEFAULT_ALGORITHM] * n_cols
+            algorithms = _get_best_compression_algorithm(chunk)
             int_algorithms = [algorithm.value for algorithm in algorithms]
             algorithms_fmt = _create_fmt_for_algoritms(n_cols)
 
