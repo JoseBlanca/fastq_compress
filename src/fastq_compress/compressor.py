@@ -1,24 +1,24 @@
 import lzma
 import gzip
-from enum import StrEnum
+from enum import IntEnum
 from typing import BinaryIO
 import struct
 
 import zstandard
 
 
-class Compression(StrEnum):
-    ZSTD = "zstd"
-    GZIP = "gzip"
-    LZMA = "lzma"
+class CompressionAlgorithm(IntEnum):
+    GZIP = 0
+    LZMA = 1
+    ZSTD = 2
 
 
-DEFAULT_ALGORITHM = Compression.LZMA
+DEFAULT_ALGORITHM = CompressionAlgorithm.LZMA
 
 COMPRESSION_ALGORITHMS = {
-    Compression.GZIP: {"compressor": gzip.compress},
-    Compression.LZMA: {"compressor": lzma.compress},
-    Compression.ZSTD: {"compressor": zstandard.compress},
+    CompressionAlgorithm.GZIP: {"compressor": gzip.compress},
+    CompressionAlgorithm.LZMA: {"compressor": lzma.compress},
+    CompressionAlgorithm.ZSTD: {"compressor": zstandard.compress},
 }
 
 MAGIC = b"FQC"  # "FASTQ Compressed"
@@ -29,7 +29,7 @@ N_COLS_SIZE = struct.calcsize(N_COLS_STRUCT_FMT)
 
 
 def compress_chunk(
-    columns: list[list[bytes]], algorithms: list[Compression]
+    columns: list[list[bytes]], algorithms: list[CompressionAlgorithm]
 ) -> list[bytearray]:
     compressed = []
     for col, algorithm in zip(columns, algorithms):
@@ -43,7 +43,7 @@ def compress_chunk(
 
 
 def write_compressed_file(
-    fhand: BinaryIO, chunks, algorithms: list[Compression] | None = None
+    fhand: BinaryIO, chunks, algorithms: list[CompressionAlgorithm] | None = None
 ):
     header = MAGIC + VERSION1
     fhand.write(header)
@@ -52,7 +52,9 @@ def write_compressed_file(
         n_cols = len(chunk)
         if algorithms is None:
             algorithms = [DEFAULT_ALGORITHM] * n_cols
+
         fhand.write(struct.pack(N_COLS_STRUCT_FMT, n_cols))
+
         if n_cols != len(algorithms):
             raise RuntimeError("Different chunks have a different number of columns")
 
