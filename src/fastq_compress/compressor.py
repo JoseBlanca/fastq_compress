@@ -78,7 +78,7 @@ def read_compressed_file(fhand: BinaryIO):
         raise RuntimeError("The file is empty")
     if magic != MAGIC:
         raise RuntimeError(
-            "Wrong magic number, it dos not look like a compressed FASTQ file"
+            "Wrong magic number, it does not look like a compressed FASTQ file"
         )
     assert magic == MAGIC
     version = fhand.read(1)
